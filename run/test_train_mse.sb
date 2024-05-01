@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH --mem=50GB
+#SBATCH --gpus=v100:1
+#SBATCH --time=00:15:00
+#SBATCH --account=wang-krishnan
+
+module purge
+module load CUDA/11.8.0
+
+source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/pytorch
+
+cd /mnt/scratch/f0106094/face2age
+python -u train.py \
+-loss mse \
+epochs 1 \
+--save \
+-batch_size 128 
+
+
