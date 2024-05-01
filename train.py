@@ -1,7 +1,8 @@
 import torch
 import torch.nn
+import pandas as pd
 from tqdm import tqdm
-import torch.nn as nn
+import torch.nn as nnpathlib import Path
 from pathlib import Path
 import torch.optim as optim
 import torchvision.models as models
@@ -9,7 +10,68 @@ from image_dataset import ImageDataset
 from sklearn.model_selection import train_test_split
 from torchvision.transforms import ToPILImage
 from torch.utils.data import DataLoader, Subset
+from network import Model 
+from argparse import ArgumentParser
+from loss import LogCosh, HuboshLoss
 
+
+def assign_loss(loss: str):
+    if loss == 'mse':
+        return nn.MSELoss()
+    elif loss == 'log_cosh':
+        return LogCosh()
+    elif loss == 'huber':
+        return nn.SmoothL1Loss(delta=0.1)
+    elif loss == 'hubosh':
+        return HuboshLoss()
+    else:
+        raise ValueError('Choose a valid loss function')
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument(
+        '-loss',
+        help='Which loss function to use',
+        type=str,
+        choices=['mse', 'log_cosh', 'huber', 'hubosh'],
+        default='mse',
+    )
+    parser.add_argument(
+        '-epochs',
+        help='number of epochs to run',
+        type=int,
+        default=25,
+    )
+    parser.add_argument(
+        '--save',
+        help='if applied, will save the model weights',
+        action='store_true',
+    )
+    parser.add_argument(
+        '-batch_size',
+        help='size of each batch',
+        type=int,
+        default=128,
+    )
+    parser.add_argument(
+        '-train_size',
+        help='percent of data used for training',
+        type=float,
+        default=0.7,
+    )
+    parser.add_argument(
+        '-val_size',
+        help='percent of data used for validation',
+        type=float,
+        default=0.2,
+    )
+    parser.add_argument(
+        '-test_size',
+        help='percent of data used for testing',
+        type=float,
+        default=0.1,
+    )   
 
 # Set paths
 DATA_DIR = Path('data')
@@ -19,68 +81,15 @@ TEST_IMGS = DATA_DIR / 'wiki_judge_images'
 labels_file = DATA_DIR / 'wiki_labels.csv'
 judge_ids_file = DATA_DIR / 'wiki_judge.csv'
 
-# Define network
-class VGG16FeatureExtractor(nn.Module):
-    def __init__(self):
-        super(VGG16FeatureExtractor, self).__init__()
-        # Load pre-trained VGG-16 model
-        self.vgg16 = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
-        
-        # Freeze parameters
-        for param in self.vgg16.parameters():
-            param.requires_grad = False
-        
-    def forward(self, x):
-        out = self.vgg16(x)
-        
-        return out
-    
-
-class AgePredictor(nn.Module):
-    def __init__(self):
-        super(AgePredictor, self).__init__()
-        
-        self.flat = nn.Flatten()
-        self.l0 = nn.Linear(1000, 300)
-        self.l1 = nn.Linear(300, 100)
-        self.l2 = nn.Linear(100, 1)
-        
-        self.body = nn.Sequential(
-            self.flat,
-            self.l0,
-            nn.ReLU(inplace=True),
-            self.l1,
-            nn.ReLU(inplace=True),
-            self.l2,
-            nn.Sigmoid()
-        )
-    
-    def forward(self, x):
-        out = self.body(x)
-        return out
-    
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        
-        self.vgg = VGG16FeatureExtractor()
-        self.age_predictor = AgePredictor()
-        
-    def forward(self, x):
-        vgg_out = self.vgg(x)
-        age_out = self.age_predictor(vgg_out)
-        
-        return age_out
-
-
 # Define training parameters
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-train_size = 0.7
-validation_size = 0.2
-test_size = 0.1
-batch_size = 128
-epochs = 25
-save_model = True
+train_size = args.train_size
+validation_size = args.val_size
+test_size = args.test_size
+batch_size = args.batch_size
+epochs = args.epochs
+save_model = args.save
+loss_fn = assign_loss(args.loss)
 
 # Get training data
 train_data = ImageDataset(
@@ -102,24 +111,26 @@ train_indices, val_indices = train_test_split(
     random_state=42,
 )
 
-# Define datasets for each partition
+# Save test indices
+test_indices_file = "data/test_indices.txt"
+with open(test_indices_file, 'w') as f:
+    for index in test_indices:
+        f.write(str(index) + '\n')
+
+# Define datasets for each train_dataset = Subset(train_data, train_indices)
 train_dataset = Subset(train_data, train_indices)
 val_dataset = Subset(train_data, val_indices)
-test_dataset = Subset(train_data, test_indices)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=1, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=1, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=1, shuffle=False)
 
-loss = 'MSE'
-if loss == 'MSE':
-    loss_fn = nn.MSELoss()
+# Initialize model
 model = Model().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.0003)
 
 
-print('Using device:', device)
-training_metrics = {'epoch': [], 'loss': []}
+print('Using device:', device)etrics = {'epoch': [], 'loss': []}
+val_metrics = {'epoch': [], 'loss': []}
 for epoch in range(1, epochs+1):
     run_result = {'nsamples': 0, 'loss': 0}
     
@@ -133,17 +144,53 @@ for epoch in range(1, epochs+1):
         batch_size = data.size(0)
         run_result['nsamples'] += batch_size
         
-        label = target.to(device)
+        label = target.to(device).unsqueeze(1).float()
         z = data.to(device)
         pred_age = model(z.float())
 
-        ######### Train generator #########
-        label = label.unsqueeze(1)
-        label = label.float()
         model.zero_grad()
         loss = loss_fn(pred_age, label)
         loss.backward()
         optimizer.step()
+        
+        run_result['loss'] += loss.item() * batch_size
+       
+    training_metrics['loss'].append(run_result['loss'] / run_result['nsamples'])
+    training_metrics['epoch'].append(epoch)
+    model.eval()
 
+    # Test on validation set
+    batch_loss = []
+    valid_result = {'nsamples': 0, 'loss': 0}
+    with torch.no_grad():
+        valid_bar = tqdm(val_loader)
+        for data, target in valid_bar:
+            batch_size = data.size(0)
+            valid_result['nsamples'] = batch_size
+
+            label = target.to(device).unsqueeze(1).float() 
+            z = data.to(device)
+            pred_age = model(z.float())
+            
+            loss = loss_fn(pred_age, label)
+            valid_result['loss'] += loss.item() * batch_size
+
+        val_metrics['loss'].append(valid_result['loss'] / valid_result['nsamples'])
+        val_metrics['epoch'].append(epoch)            
+
+# Save model
+if save_model:
+    torch.save(model.state_dict(), f'results/model_epochs-{epochs}.pytorch')
+
+# Save training and validation metrics
 training_metrics_df = pd.DataFrame.from_dict(training_metrics)
-training_metrics_df.to_csv(f'results/{loss}_training_loss.csv')
+val_metrics_df = pd.DataFrame.from_dict(val_metrics)
+
+training_metrics_df.to_csv(f'results/{args.loss}_training_loss.csv')
+val_metrics_df.to_csv(f'results/{args.loss}_val_loss.csv')
+
+# Test model
+
+
+
+
