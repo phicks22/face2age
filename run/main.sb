@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH --mem=150GB
+#SBATCH --gpus=v100:1
+#SBATCH --time=04:30:00
+#SBATCH --account=wang-krishnan
+
+module purge
+module load CUDA/11.8.0
+
+source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/pytorch
+
+cd /mnt/scratch/f0106094/face2age
+python main.py
+
