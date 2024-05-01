@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --mem=150GB
+#SBATCH --mem=50GB
 #SBATCH --gpus=v100:1
-#SBATCH --time=04:30:00
+#SBATCH --time=00:15:00
 #SBATCH --account=wang-krishnan
 
 module purge
@@ -12,8 +12,9 @@ conda activate ~/anaconda3/envs/pytorch
 
 cd /mnt/scratch/f0106094/face2age
 python -u train.py \
--loss mse \
-epochs 25 \
+-loss huber \
+epochs 1 \
 --save \
 -batch_size 128 
+
 
