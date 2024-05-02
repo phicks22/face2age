@@ -26,8 +26,9 @@ class AgePredictor(nn.Module):
         
         self.flat = nn.Flatten()
         self.l0 = nn.Linear(1000, 300)
-        self.l1 = nn.Linear(300, 100)
-        self.l2 = nn.Linear(100, 1)
+        self.l1 = nn.Linear(300, 300)
+        self.l2 = nn.Linear(300, 100)
+        self.l3 = nn.Linear(100, 1)
         
         self.body = nn.Sequential(
             self.flat,
@@ -36,13 +37,15 @@ class AgePredictor(nn.Module):
             self.l1,
             nn.ReLU(inplace=True),
             self.l2,
-            nn.Sigmoid()
+            nn.ReLU(inplace=True),
+            self.l3
         )
     
     def forward(self, x):
         out = self.body(x)
         return out
-    
+   
+ 
 class Model(nn.Module):
     def __init__(self):
         super(Model, self).__init__()
