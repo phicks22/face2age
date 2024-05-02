@@ -19,10 +19,20 @@ class HuboshLoss(nn.Module):
         log_cosh = LogCoshLoss()
         log_cosh_loss = log_cosh(y_true, y_pred)
         
-        huber = nn.SmoothL1Loss(delta=0.1)
+        huber = nn.SmoothL1Loss(beta=0.1)
         huber_loss = huber(y_pred, y_true)
         
         total_loss = torch.add(huber_loss, log_cosh_loss)
  
         return torch.mean(total_loss)
+
+
+class RMSLE(nn.Module):
+    def __init__(self):
+        super().__init()
+
+    def forward(self, y_pred, y_true):
+        log_loss = torch.log(1 + y_true) - torch.log(1 + y_pred)
+
+        return torch.sqrt(torch.mean(torch.square(log_loss)))
 
