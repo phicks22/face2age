@@ -54,3 +54,40 @@ class ImageDataset(Dataset):
             image = self.transform(np.array(new_image))
         image = self.preprocess_image(image, target_size)
         return image, label
+
+
+class TestDataset(Dataset):
+    def __init__(self, annotations_file, img_dir, transform=None):
+        self.img_ids = pd.read_csv(annotations_file)
+        self.img_dir = img_dir
+        self.transform = transform
+
+    def preprocess_image(self, img, target_size):
+        # Resize the image
+        image = img.resize(target_size)
+        # Convert image to numpy array
+        image_array = np.array(image)
+        # Normalize pixel values
+        image_array = image_array / 255.0
+        # If the image is grayscale, convert it to RGB
+        if len(image_array.shape) == 2:
+            image_array = np.stack((image_array,) * 3, axis=-1)
+       
+        return image_array.transpose(2, 0, 1)
+
+    def __len__(self):
+        return len(self.img_ids)
+
+    def __getitem__(self, idx):
+        target_size = (240, 240)
+        img_path = self.img_dir / Path(self.img_ids.loc[idx, 'full_path'].strip("'[]'"))
+        image = Image.open(img_path)
+        image.thumbnail(target_size, Image.Resampling.LANCZOS)
+        new_image = Image.new('RGB', target_size)
+        new_image.paste(image, ((target_size[0] - image.size[0]) // 2, (target_size[1] - image.size[1]) // 2))
+        if self.transform:
+            image = self.transform(np.array(new_image))
+        image = self.preprocess_image(image, target_size)
+        
+        return image, img_path.stem
+
