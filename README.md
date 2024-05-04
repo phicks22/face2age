@@ -27,5 +27,6 @@ See environment.yml
 
 #### Directories
 - run
-	- Contains `.sb` files to train and test the model on an HPC
+	- Contains `.sb` files to train the model on an HPC and a `test.sh` file to test models. 
+	- Unfortunately, my weight files are too big to upload to github (>600Mb).
 
