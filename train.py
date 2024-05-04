@@ -21,11 +21,22 @@ def assign_loss(loss: str):
     elif loss == 'log_cosh':
         return LogCoshLoss()
     elif loss == 'huber':
-        return nn.SmoothL1Loss(delta=0.1)
+        return nn.HuberLoss()
     elif loss == 'hubosh':
         return HuboshLoss()
     else:
         raise ValueError('Choose a valid loss function')
+
+def apply_loss(loss, loss_fn, y_true, y_pred):
+    if loss == 'mse':
+        return loss_fn(y_pred, y_true)
+    elif loss == 'log_cosh':
+        return loss_fn(torch.squeeze(torch.t(y_true)), torch.squeeze(torch.t(y_pred)))
+    elif loss == 'huber':
+        return loss_fn(y_pred, y_true)
+    elif loss == 'hubosh':
+        return loss_fn(torch.squeeze(torch.t(y_pred)), torch.squeeze(torch.t(y_true)))
+
 
 def adjust_learning_rate(lr_start: float, epoch: int) -> float:
     lr = lr_start * (0.01 ** (epoch // 30))
@@ -115,7 +126,8 @@ if __name__ == '__main__':
     save_model = args.save
     loss_fn = assign_loss(args.loss)
     lr = args.lr
-
+    outdir = Path(args.outdir)
+    
     # Get training data
     train_data = ImageDataset(
         labels_file, 
@@ -150,23 +162,17 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=1, shuffle=True)
 
     # Initialize model
-    model = Model().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
-
+    model = Model()
+    model = model.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     print('Using device:', device)
     training_metrics = {'epoch': [], 'loss': []}
     val_metrics = {'epoch': [], 'loss': []}
+    best_loss = 0
     for epoch in range(1, epochs+1):
         run_result = {'nsamples': 0, 'loss': 0}
-        
-        #alr = adjust_learning_rate(0.0005, epoch)
-        #optimizer = optim.Adam(model.parameters(), lr = alr)
-        for p in model.parameters():
-            if p.grad is not None:
-                del p.grad  # free some memory
-        torch.cuda.empty_cache()
-        
+        model.train()
         train_bar = tqdm(train_loader)
         for data, target in train_bar:
             batch_size = data.size(0)
@@ -175,17 +181,16 @@ if __name__ == '__main__':
             label = target.to(device).unsqueeze(1).float()
             z = data.to(device)
             pred_age = model(z.float())
-
             model.zero_grad()
-            loss = loss_fn(pred_age, label)
+            loss = apply_loss(args.loss, loss_fn, pred_age, label)
             loss.backward()
             optimizer.step()
-            
             run_result['loss'] += loss.item() * batch_size
-           
-        training_metrics['loss'].append(run_result['loss'] / run_result['nsamples'])
+        run_loss = run_result['loss'] / run_result['nsamples'] 
+        training_metrics['loss'].append(run_loss)
         training_metrics['epoch'].append(epoch)
         model.eval()
+        print(f"Training loss for epoch {epoch}: {run_loss}")
 
         # Test on validation set
         batch_loss = []
@@ -199,18 +204,23 @@ if __name__ == '__main__':
                 label = target.to(device).unsqueeze(1).float() 
                 z = data.to(device)
                 pred_age = model(z.float())
-                
-                loss = loss_fn(pred_age, label)
+                loss = apply_loss(args.loss, loss_fn, pred_age, label)
                 valid_result['loss'] += loss.item() * batch_size
-
-            val_metrics['loss'].append(valid_result['loss'] / valid_result['nsamples'])
+            
+            epoch_loss = valid_result['loss'] / valid_result['nsamples']
+            val_metrics['loss'].append(epoch_loss)
             val_metrics['epoch'].append(epoch)            
-
+            
+        if epoch_loss > best_loss:
+            best_loss = epoch_loss
+            if save_model:
+                print('Saving Model.')
+                torch.save(model.state_dict(), outdir / f'pretrained_weights/model__loss-{args.loss}__epochs-{epoch}__batch-{args.batch_size}.pytorch')
+    
     # Save model 
-    outdir = Path(args.outdir)
     if save_model:
         print('Saving Model.')
-        torch.save(model.state_dict(), outdir / f'pretrained_weights/model_epochs-{epochs}.pytorch')
+        torch.save(model.state_dict(), outdir / f'pretrained_weights/model__loss-{args.loss}__epochs-{epochs}__batch-{args.batch_size}.pytorch')
 
     # Save training and validation metrics
     print('Saving training/validation metrics.')
