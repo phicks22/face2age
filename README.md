@@ -15,7 +15,7 @@ See environment.yml
 - loss.py
 	- Defines `Log Cosh` and `Hubosh` loss functions
 	- Called in `train.py` and `test.py`
-- network.py
+- model.py
 	- Defines the `Model` class which is composed of the following
 		- The `VGG16FeatureExtractor` class passes an input image through VGG16
 		- The `AgePredictor` class is an MLP for regression of the VGG16 features to predict age
