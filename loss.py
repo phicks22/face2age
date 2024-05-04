@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 
 class LogCoshLoss(nn.Module):
@@ -27,12 +28,12 @@ class HuboshLoss(nn.Module):
         return torch.mean(total_loss)
 
 
-class RMSLE(nn.Module):
+class RMSLE():
     def __init__(self):
         super().__init()
 
     def forward(self, y_pred, y_true):
-        log_loss = torch.log(1 + y_true) - torch.log(1 + y_pred)
+        log_loss = np.log(1 + y_true) - np.log(1 + y_pred)
 
-        return torch.sqrt(torch.mean(torch.square(log_loss)))
+        return np.sqrt(np.mean(np.square(log_loss)))
 

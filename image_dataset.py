@@ -88,6 +88,5 @@ class TestDataset(Dataset):
         if self.transform:
             image = self.transform(np.array(new_image))
         image = self.preprocess_image(image, target_size)
-        
-        return image, img_path.stem
+        return image, int((img_path.stem).strip("(), '"))
 
