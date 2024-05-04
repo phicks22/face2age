@@ -2,7 +2,7 @@
 Predicting age from images of faces
 
 ## Dependencies
-See environment.yml
+See `environment.yml`
 
 ## Repo components
 
@@ -24,6 +24,11 @@ See environment.yml
 	- Splits training data into training, validation, and test sets
 		- The test indices are saved to data/test_indices.txt
 	- Saves the model weights, training metrics, and validation metrics to the `results` directory
+ - test.py
+	- Given a `.pytorch` weights file, will predict age from faces in a test set
+ 	- Generates a `.csv` file with columns `ID` and `age`
+		- If `--test_set` argument is used, the `ID` column is the true age
+    		- If the argument is not used, then `ID` is the image id (for the final submission)
 
 #### Directories
 - run
